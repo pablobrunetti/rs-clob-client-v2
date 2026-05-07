@@ -177,11 +177,13 @@ pub(crate) mod l1 {
         chain_id: ChainId,
         timestamp: Timestamp,
         nonce: Option<u32>,
+        address_override: Option<crate::types::Address>,
     ) -> Result<HeaderMap> {
         let naive_nonce = nonce.unwrap_or(0);
+        let auth_address = address_override.unwrap_or_else(|| signer.address());
 
         let auth = ClobAuth {
-            address: signer.address(),
+            address: auth_address,
             timestamp: timestamp.to_string(),
             nonce: U256::from(naive_nonce),
             message: "This message attests that I control the given wallet".to_owned(),
@@ -200,7 +202,7 @@ pub(crate) mod l1 {
         let mut map = HeaderMap::new();
         map.insert(
             POLY_ADDRESS,
-            signer.address().encode_hex_with_prefix().parse()?,
+            auth_address.encode_hex_with_prefix().parse()?,
         );
         map.insert(POLY_NONCE, naive_nonce.to_string().parse()?);
         map.insert(POLY_SIGNATURE, signature.to_string().parse()?);
@@ -312,7 +314,7 @@ mod tests {
     async fn l1_headers_should_succeed() -> anyhow::Result<()> {
         let signer = LocalSigner::from_str(PRIVATE_KEY)?.with_chain_id(Some(AMOY));
 
-        let headers = l1::create_headers(&signer, AMOY, 10_000_000, Some(23)).await?;
+        let headers = l1::create_headers(&signer, AMOY, 10_000_000, Some(23), None).await?;
 
         assert_eq!(
             signer.address(),
