@@ -247,8 +247,12 @@ impl<S: Signer, K: Kind> AuthenticationBuilder<'_, S, K> {
             }
         };
 
+        let state_address = match (funder, self.signature_type) {
+            (Some(dw), Some(SignatureType::Poly1271)) => dw,
+            _ => self.signer.address(),
+        };
         let state = Authenticated {
-            address: self.signer.address(),
+            address: state_address,
             credentials,
             kind: self.kind,
         };
