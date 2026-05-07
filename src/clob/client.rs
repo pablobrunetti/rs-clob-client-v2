@@ -241,12 +241,8 @@ impl<S: Signer, K: Kind> AuthenticationBuilder<'_, S, K> {
             }
             Some(credentials) => credentials,
             None => {
-                let addr_override = match (funder, self.signature_type) {
-                    (Some(dw), Some(SignatureType::Poly1271)) => Some(dw),
-                    _ => None,
-                };
                 inner
-                    .create_or_derive_api_key(self.signer, self.nonce, addr_override)
+                    .create_or_derive_api_key(self.signer, self.nonce)
                     .await?
             }
         };
@@ -502,20 +498,11 @@ impl ClientInner<Unauthenticated> {
         signer: &S,
         nonce: Option<u32>,
     ) -> Result<Credentials> {
-        self.create_api_key_with_address(signer, nonce, None).await
-    }
-
-    async fn create_api_key_with_address<S: Signer>(
-        &self,
-        signer: &S,
-        nonce: Option<u32>,
-        address_override: Option<crate::types::Address>,
-    ) -> Result<Credentials> {
         let request = self
             .client
             .request(Method::POST, format!("{}auth/api-key", self.host))
             .build()?;
-        let headers = self.create_headers(signer, nonce, address_override).await?;
+        let headers = self.create_headers(signer, nonce).await?;
 
         crate::request(&self.client, request, Some(headers)).await
     }
@@ -525,20 +512,11 @@ impl ClientInner<Unauthenticated> {
         signer: &S,
         nonce: Option<u32>,
     ) -> Result<Credentials> {
-        self.derive_api_key_with_address(signer, nonce, None).await
-    }
-
-    async fn derive_api_key_with_address<S: Signer>(
-        &self,
-        signer: &S,
-        nonce: Option<u32>,
-        address_override: Option<crate::types::Address>,
-    ) -> Result<Credentials> {
         let request = self
             .client
             .request(Method::GET, format!("{}auth/derive-api-key", self.host))
             .build()?;
-        let headers = self.create_headers(signer, nonce, address_override).await?;
+        let headers = self.create_headers(signer, nonce).await?;
 
         crate::request(&self.client, request, Some(headers)).await
     }
@@ -547,20 +525,19 @@ impl ClientInner<Unauthenticated> {
         &self,
         signer: &S,
         nonce: Option<u32>,
-        address_override: Option<crate::types::Address>,
     ) -> Result<Credentials> {
-        match self.create_api_key_with_address(signer, nonce, address_override).await {
+        match self.create_api_key(signer, nonce).await {
             Ok(creds) => Ok(creds),
             Err(err) if err.kind() == ErrorKind::Status => {
                 // Only fall back to derive_api_key for HTTP status errors (server responded
                 // with an error, e.g., key already exists). Propagate network/internal errors.
-                self.derive_api_key_with_address(signer, nonce, address_override).await
+                self.derive_api_key(signer, nonce).await
             }
             Err(err) => Err(err),
         }
     }
 
-    async fn create_headers<S: Signer>(&self, signer: &S, nonce: Option<u32>, address_override: Option<crate::types::Address>) -> Result<HeaderMap> {
+    async fn create_headers<S: Signer>(&self, signer: &S, nonce: Option<u32>) -> Result<HeaderMap> {
         let chain_id = signer.chain_id().ok_or(Error::validation(
             "Chain id not set, be sure to provide one on the signer",
         ))?;
@@ -571,7 +548,7 @@ impl ClientInner<Unauthenticated> {
             Utc::now().timestamp()
         };
 
-        auth::l1::create_headers(signer, chain_id, timestamp, nonce, address_override).await
+        auth::l1::create_headers(signer, chain_id, timestamp, nonce).await
     }
 }
 
@@ -1602,7 +1579,7 @@ impl Client<Unauthenticated> {
         signer: &S,
         nonce: Option<u32>,
     ) -> Result<Credentials> {
-        self.inner.create_or_derive_api_key(signer, nonce, None).await
+        self.inner.create_or_derive_api_key(signer, nonce).await
     }
 }
 
