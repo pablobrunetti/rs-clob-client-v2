@@ -1475,7 +1475,17 @@ impl Client<Unauthenticated> {
         headers.insert("Connection", HeaderValue::from_static("keep-alive"));
         headers.insert("Content-Type", HeaderValue::from_static("application/json"));
 
-        let client = ReqwestClient::builder().default_headers(headers).build()?;
+        // Latency tuning matched to polyfill-rs fork (benchmarked ~11% improvement
+        // on 350ms baseline). tcp_nodelay disables Nagle which can stall small
+        // POSTs by up to 40ms when paired with delayed ACKs.
+        let client = ReqwestClient::builder()
+            .default_headers(headers)
+            .tcp_nodelay(true)
+            .http2_adaptive_window(true)
+            .http2_initial_stream_window_size(512 * 1024)
+            .pool_max_idle_per_host(10)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .build()?;
 
         let geoblock_host = Url::parse(
             config
